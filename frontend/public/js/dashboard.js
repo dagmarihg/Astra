@@ -416,7 +416,10 @@ async function loadBilling() {
               <div style="color: #6b7280; font-size: 0.9rem;">${payment.plan_name} - $${parseFloat(payment.amount).toFixed(2)}</div>
               <div style="color: #6b7280; font-size: 0.85rem;">${new Date(payment.created_at).toLocaleDateString()}</div>
             </div>
-            <span class="status-badge pending">${payment.status}</span>
+            <div style="display:flex; gap:0.5rem; align-items:center;">
+              <button class="btn btn-sm" onclick="uploadUTR(${payment.id})">Upload UTR</button>
+              <span class="status-badge pending">${payment.status}</span>
+            </div>
           </div>
         `;
         pendingContainer.appendChild(div);
@@ -424,6 +427,31 @@ async function loadBilling() {
     }
   } catch (err) {
     console.error('Error loading billing:', err);
+  }
+}
+
+async function uploadUTR(paymentId) {
+  const utr = prompt('Enter UTR / transaction reference');
+  if (!utr) return;
+  try {
+    const response = await fetch(`${API_BASE}/payments/${paymentId}/upload`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${customerToken}`
+      },
+      body: JSON.stringify({ utr })
+    });
+    if (response.ok) {
+      alert('UTR uploaded. Admin will review and approve shortly.');
+      loadBilling();
+      loadOverview();
+    } else {
+      const err = await response.json();
+      alert('Upload failed: ' + (err.error || 'unknown'));
+    }
+  } catch (err) {
+    alert('Error: ' + err.message);
   }
 }
 

@@ -3,6 +3,8 @@ const pool = require('../../db/connection');
 const authMiddleware = require('../middleware/auth');
 const { requireRole } = require('../middleware/role');
 const { generateSFTPCredentials } = require('../utils/credentials');
+const mailer = require('../utils/mailer');
+const notifications = require('../utils/notifications');
 
 const router = express.Router();
 
@@ -138,6 +140,25 @@ router.post(
 
       await client.query('COMMIT');
 
+      // Send approval email to user with credentials (best-effort)
+      try {
+        const userResult = await pool.query('SELECT email, username FROM users WHERE id = $1', [payment.user_id]);
+        const user = userResult.rows[0];
+        const html = `<p>Hi ${user.username},</p>
+          <p>Your payment (UTR: ${utr}) has been approved and your server is now active.</p>
+          <p><strong>Server Credentials</strong></p>
+          <ul>
+            <li>Username: ${credentials.username}</li>
+            <li>Password: ${credentials.password}</li>
+            <li>Host: sftp.astra.host</li>
+            <li>Port: 2222</li>
+          </ul>
+          <p>Regards,<br/>Astra Team</p>`;
+        await mailer.sendMail(user.email, 'Payment Approved - Your Server is Active', html, `Your server is active. Username: ${credentials.username}`);
+      } catch (err) {
+        console.error('[MAIL_APPROVAL_ERROR]', err.message);
+      }
+
       res.json({
         message: 'payment_approved',
         payment: {
@@ -151,6 +172,18 @@ router.post(
           credentials,
         },
       });
+
+      // Notify connected admins in real-time
+      try {
+        notifications.emitToAdmins('payment:approved', {
+          payment_id: payment.id,
+          server_id: payment.server_id,
+          user_id: payment.user_id,
+          credentials,
+        });
+      } catch (err) {
+        console.error('[NOTIFY_APPROVAL_ERROR]', err.message);
+      }
     } catch (err) {
       await client.query('ROLLBACK');
       console.error('[APPROVE_ERROR]', err);
@@ -219,6 +252,19 @@ router.post(
 
       await client.query('COMMIT');
 
+      // Send rejection email to user (best-effort)
+      try {
+        const userResult = await pool.query('SELECT email, username FROM users WHERE id = $1', [payment.user_id]);
+        const user = userResult.rows[0];
+        const html = `<p>Hi ${user.username},</p>
+          <p>Your payment has been rejected by the admin.</p>
+          <p>Reason: ${reason}</p>
+          <p>If you have questions, reply to support.</p>`;
+        await mailer.sendMail(user.email, 'Payment Rejected', html, `Your payment was rejected: ${reason}`);
+      } catch (err) {
+        console.error('[MAIL_REJECT_ERROR]', err.message);
+      }
+
       res.json({
         message: 'payment_rejected',
         payment: {
@@ -227,6 +273,13 @@ router.post(
           reason,
         },
       });
+
+      // Emit real-time notification to admins
+      try {
+        notifications.emitToAdmins('payment:rejected', { payment_id: payment.id, reason });
+      } catch (err) {
+        console.error('[NOTIFY_REJECT_ERROR]', err.message);
+      }
     } catch (err) {
       await client.query('ROLLBACK');
       console.error('[REJECT_ERROR]', err);
@@ -236,6 +289,82 @@ router.post(
     }
   }
 );
+
+    // Customer: Upload UTR / receipt for a pending payment
+    router.post('/:id/upload', authMiddleware, async (req, res) => {
+      const { id } = req.params;
+      const { utr } = req.body;
+      const userId = req.user.id;
+
+      if (!utr) {
+        return res.status(400).json({ error: 'missing_utr' });
+      }
+
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+
+        const paymentResult = await client.query('SELECT id, user_id, status FROM payments WHERE id = $1', [id]);
+        if (paymentResult.rows.length === 0) {
+          await client.query('ROLLBACK');
+          return res.status(404).json({ error: 'payment_not_found' });
+        }
+
+        const payment = paymentResult.rows[0];
+        if (payment.user_id !== userId) {
+          await client.query('ROLLBACK');
+          return res.status(403).json({ error: 'forbidden' });
+        }
+
+        if (payment.status !== 'pending') {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ error: 'invalid_payment_state' });
+        }
+
+        await client.query(
+          `UPDATE payments SET utr = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2`,
+          [utr, id]
+        );
+
+        await client.query(
+          `INSERT INTO audit_logs (user_id, action, resource, resource_id, status)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [userId, 'payment_utr_uploaded', 'payment', id, 'pending']
+        );
+
+        await client.query('COMMIT');
+
+        // Notify admins (best-effort)
+        try {
+          const details = await pool.query(
+            `SELECT p.id, p.amount, u.username, u.email, s.server_name, pl.name as plan_name
+             FROM payments p
+             JOIN users u ON p.user_id = u.id
+             JOIN servers s ON p.server_id = s.id
+             JOIN plans pl ON p.plan_id = pl.id
+             WHERE p.id = $1`,
+            [id]
+          );
+          const d = details.rows[0];
+          const html = `<p>Payment UTR uploaded by ${d.username} (${d.email})</p>
+            <p>Server: ${d.server_name}</p>
+            <p>Plan: ${d.plan_name}</p>
+            <p>Amount: ${d.amount}</p>
+            <p>UTR: ${utr}</p>`;
+          await mailer.notifyAdmins(`UTR Uploaded - Payment ${id}`, html, `UTR: ${utr}`);
+        } catch (err) {
+          console.error('[MAIL_UTR_UPLOAD_ERROR]', err.message);
+        }
+
+        res.json({ message: 'utr_uploaded', payment_id: id });
+      } catch (err) {
+        await client.query('ROLLBACK');
+        console.error('[UTR_UPLOAD_ERROR]', err.message);
+        res.status(500).json({ error: 'internal_error' });
+      } finally {
+        client.release();
+      }
+    });
 
 module.exports = router;
 

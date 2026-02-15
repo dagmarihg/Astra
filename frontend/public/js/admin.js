@@ -13,7 +13,51 @@ document.addEventListener('DOMContentLoaded', () => {
   initializeAdmin();
   setupEventListeners();
   loadDashboard();
+  setupRealtime();
 });
+
+function setupRealtime() {
+  try {
+    const socket = io();
+    socket.on('connect', () => {
+      // Join admins room and provide admin token for server-side verification
+      socket.emit('join_admin', { token: adminToken });
+    });
+
+    socket.on('payment:approved', (data) => {
+      showNotification(`Payment ${data.payment_id} approved; server ${data.server_id} activated.`);
+      loadPayments();
+      loadServers();
+    });
+
+    socket.on('payment:rejected', (data) => {
+      showNotification(`Payment ${data.payment_id} rejected: ${data.reason || 'no reason'}`);
+      loadPayments();
+    });
+
+    socket.on('servers:expired', (data) => {
+      showNotification(`Servers expired: ${data.count}`);
+      loadServers();
+    });
+  } catch (err) {
+    console.warn('Realtime not available:', err.message);
+  }
+}
+
+function showNotification(msg) {
+  const el = document.createElement('div');
+  el.className = 'realtime-notice';
+  el.textContent = msg;
+  el.style.position = 'fixed';
+  el.style.right = '1rem';
+  el.style.bottom = '1rem';
+  el.style.background = '#111';
+  el.style.color = '#fff';
+  el.style.padding = '0.75rem 1rem';
+  el.style.borderRadius = '6px';
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 8000);
+}
 
 function setupEventListeners() {
   // Navigation
@@ -274,6 +318,53 @@ async function loadPlans() {
   }
 }
 
+// Edit plan: populate modal with existing plan data
+async function editPlan(planId) {
+  try {
+    const resp = await fetch(`${API_BASE}/plans/${planId}`, {
+      headers: { 'Authorization': `Bearer ${adminToken}` }
+    });
+    if (!resp.ok) {
+      alert('Could not load plan');
+      return;
+    }
+    const data = await resp.json();
+    const plan = data.plan;
+
+    document.getElementById('planModalTitle').textContent = 'Edit Plan';
+    document.getElementById('planIdInput').value = plan.id;
+    document.getElementById('planName').value = plan.name || '';
+    document.getElementById('planPrice').value = plan.price || 0;
+    document.getElementById('planCPU').value = plan.cpu_cores || '';
+    document.getElementById('planRAM').value = plan.ram_gb || '';
+    document.getElementById('planStorage').value = plan.storage_gb || '';
+    document.getElementById('planPlayers').value = plan.max_players || '';
+
+    openModal('planModal');
+  } catch (err) {
+    alert('Error loading plan: ' + err.message);
+  }
+}
+
+async function deletePlan(planId) {
+  if (!confirm('Delete this plan? This will mark it inactive.')) return;
+  try {
+    const resp = await fetch(`${API_BASE}/plans/${planId}`, {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${adminToken}` }
+    });
+    if (resp.ok) {
+      alert('Plan deleted');
+      loadPlans();
+    } else {
+      const err = await resp.json();
+      alert('Error deleting plan: ' + (err.error || JSON.stringify(err)));
+    }
+  } catch (err) {
+    alert('Error deleting plan: ' + err.message);
+  }
+}
+
 async function loadCustomers() {
   try {
     // Using dashboard endpoint to get customer count
@@ -281,10 +372,94 @@ async function loadCustomers() {
       headers: { 'Authorization': `Bearer ${adminToken}` }
     });
     const data = await response.json();
-    // In a real app, would have a separate endpoint for customer list
-    document.getElementById('customersBody').innerHTML = '<tr><td colspan="6" style="text-align:center">Customer list endpoint needed</td></tr>';
+    // Use admin users endpoint to populate users list
+    const usersResp = await fetch(`${API_BASE}/admin/users?page=1&limit=100`, {
+      headers: { 'Authorization': `Bearer ${adminToken}` }
+    });
+    const usersData = await usersResp.json();
+
+    const tbody = document.getElementById('customersBody');
+    tbody.innerHTML = '';
+
+    if (!usersData.users || usersData.users.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center">No users</td></tr>';
+      return;
+    }
+
+    usersData.users.forEach(user => {
+      const row = document.createElement('tr');
+      row.innerHTML = `
+        <td>#${user.id}</td>
+        <td>${user.username}</td>
+        <td>${user.email}</td>
+        <td>${user.role}</td>
+        <td>${new Date(user.created_at).toLocaleString()}</td>
+        <td>${user.is_active ? 'Active' : 'Inactive'}</td>
+        <td>
+          <button class="btn btn-secondary" onclick="openEditUser(${user.id})">Edit</button>
+          <button class="btn btn-danger" onclick="toggleUserActive(${user.id}, ${user.is_active})">${user.is_active ? 'Deactivate' : 'Activate'}</button>
+        </td>
+      `;
+      tbody.appendChild(row);
+    });
   } catch (err) {
     console.error('Error loading customers:', err);
+  }
+}
+
+// Open edit user modal (simple prompt-based edit for now)
+function openEditUser(userId) {
+  const newRole = prompt('Enter role for user (admin/customer):');
+  if (!newRole) return;
+  updateUserRole(userId, newRole);
+}
+
+async function updateUserRole(userId, role) {
+  try {
+    const response = await fetch(`${API_BASE}/admin/users/${userId}`, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${adminToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ role })
+    });
+
+    if (response.ok) {
+      alert('User role updated');
+      loadCustomers();
+    } else {
+      const err = await response.json();
+      alert('Error: ' + (err.error || 'unknown'));
+    }
+  } catch (err) {
+    alert('Error updating user: ' + err.message);
+  }
+}
+
+async function toggleUserActive(userId, currentlyActive) {
+  const confirmMsg = currentlyActive ? 'Deactivate this user?' : 'Activate this user?';
+  if (!confirm(confirmMsg)) return;
+
+  try {
+    const response = await fetch(`${API_BASE}/admin/users/${userId}`, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${adminToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ is_active: !currentlyActive })
+    });
+
+    if (response.ok) {
+      alert('User status updated');
+      loadCustomers();
+    } else {
+      const err = await response.json();
+      alert('Error: ' + (err.error || 'unknown'));
+    }
+  } catch (err) {
+    alert('Error updating user: ' + err.message);
   }
 }
 
@@ -295,8 +470,50 @@ function setupModals() {
   // Plan form
   document.getElementById('planForm').addEventListener('submit', async (e) => {
     e.preventDefault();
-    // Save plan logic
-    closeModal('planModal');
+
+    const planId = document.getElementById('planIdInput').value;
+    const name = document.getElementById('planName').value.trim();
+    const price = parseFloat(document.getElementById('planPrice').value) || 0;
+    const cpu_cores = parseInt(document.getElementById('planCPU').value, 10) || null;
+    const ram_gb = parseFloat(document.getElementById('planRAM').value) || null;
+    const storage_gb = parseInt(document.getElementById('planStorage').value, 10) || null;
+    const max_players = parseInt(document.getElementById('planPlayers').value, 10) || null;
+
+    const payload = { name, price, cpu_cores, ram_gb, storage_gb, max_players };
+
+    try {
+      let resp;
+      if (!planId) {
+        resp = await fetch(`${API_BASE}/plans`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${adminToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(payload)
+        });
+      } else {
+        resp = await fetch(`${API_BASE}/plans/${planId}`, {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${adminToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(payload)
+        });
+      }
+
+      if (resp.ok) {
+        closeModal('planModal');
+        loadPlans();
+        alert(planId ? 'Plan updated' : 'Plan created');
+      } else {
+        const err = await resp.json();
+        alert('Error saving plan: ' + (err.error || JSON.stringify(err)));
+      }
+    } catch (err) {
+      alert('Error saving plan: ' + err.message);
+    }
   });
 
   // New plan button

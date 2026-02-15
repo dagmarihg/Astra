@@ -1,4 +1,8 @@
 const pool = require('../../db/connection');
+const notifications = require('./notifications');
+
+// Advisory lock key for leader election (arbitrary 64-bit int)
+const ADVISORY_LOCK_KEY = 1234567890;
 
 /**
  * Server Expiration & Auto-Renewal Manager
@@ -54,6 +58,12 @@ async function startExpirationCleanupCron() {
  */
 async function processAutoRenewals() {
   try {
+    // Attempt to acquire advisory lock; only proceed if we become leader
+    const lockResult = await pool.query('SELECT pg_try_advisory_lock($1) as locked', [ADVISORY_LOCK_KEY]);
+    if (!lockResult.rows[0].locked) {
+      // Not leader, skip
+      return;
+    }
     // Find servers expiring in 1 day (or less) with active subscription
     const result = await pool.query(
       `SELECT s.id, s.user_id, s.plan_id, s.expires_at, p.price
@@ -113,6 +123,8 @@ async function processAutoRenewals() {
     if (autoRenewals.length > 0) {
       console.log(`[AUTO_RENEW] Processed ${autoRenewals.length} servers`);
     }
+    // release advisory lock
+    await pool.query('SELECT pg_advisory_unlock($1)', [ADVISORY_LOCK_KEY]);
   } catch (err) {
     console.error('[AUTO_RENEW_PROCESS_ERROR]', err.message);
   }
@@ -123,6 +135,11 @@ async function processAutoRenewals() {
  */
 async function markExpiredServers() {
   try {
+    // Acquire advisory lock so only one instance marks expirations
+    const lockResult = await pool.query('SELECT pg_try_advisory_lock($1) as locked', [ADVISORY_LOCK_KEY]);
+    if (!lockResult.rows[0].locked) {
+      return;
+    }
     // Find expired servers
     const result = await pool.query(
       `SELECT s.id, s.user_id, s.subscription_status
@@ -150,6 +167,17 @@ async function markExpiredServers() {
     if (expiredServers.length > 0) {
       console.log(`[CLEANUP] Marked ${expiredServers.length} servers as expired`);
     }
+    // notify admins about expirations
+    if (expiredServers.length > 0) {
+      try {
+        notifications.emitToAdmins('servers:expired', { count: expiredServers.length, servers: expiredServers.map(s => s.id) });
+      } catch (err) {
+        console.error('[NOTIFY_EXPIRY_ERROR]', err.message);
+      }
+    }
+
+    // release advisory lock
+    await pool.query('SELECT pg_advisory_unlock($1)', [ADVISORY_LOCK_KEY]);
   } catch (err) {
     console.error('[CLEANUP_PROCESS_ERROR]', err.message);
   }
