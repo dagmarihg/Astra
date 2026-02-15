@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Astra Customer Dashboard</title>
+    <link rel="stylesheet" href="styles/dashboard.css">
+</head>
+<body>
+    <div class="container">
+        <nav class="navbar">
+            <div class="navbar-brand">
+                <h1>🎮 Astra Panel</h1>
+            </div>
+            <div class="navbar-menu">
+                <span id="userName">Customer</span>
+                <button id="logoutBtn" class="btn-logout">Logout</button>
+            </div>
+        </nav>
+
+        <div class="customer-layout">
+            <!-- Sidebar -->
+            <aside class="sidebar">
+                <nav class="nav-menu">
+                    <a href="#" class="nav-item active" data-section="overview">
+                        <span class="icon">📊</span> Overview
+                    </a>
+                    <a href="#" class="nav-item" data-section="servers">
+                        <span class="icon">🖥️</span> My Servers
+                    </a>
+                    <a href="#" class="nav-item" data-section="purchase">
+                        <span class="icon">🛒</span> Purchase Server
+                    </a>
+                    <a href="#" class="nav-item" data-section="billing">
+                        <span class="icon">💳</span> Billing
+                    </a>
+                    <a href="#" class="nav-item" data-section="settings">
+                        <span class="icon">⚙️</span> Settings
+                    </a>
+                </nav>
+            </aside>
+
+            <!-- Main Content -->
+            <main class="main-content">
+                <!-- Overview Section -->
+                <section id="overview-section" class="section active">
+                    <h2>Dashboard Overview</h2>
+                    
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-value" id="activeServers">0</div>
+                            <div class="stat-label">Active Servers</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="expiredServers">0</div>
+                            <div class="stat-label">Expired</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="pendingPayments">0</div>
+                            <div class="stat-label">Pending Payments</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="totalSpent">$0</div>
+                            <div class="stat-label">Total Spent</div>
+                        </div>
+                    </div>
+
+                    <div class="alert-section">
+                        <h3>⚠️ Alerts</h3>
+                        <div id="alertsContainer" class="alerts"></div>
+                    </div>
+                </section>
+
+                <!-- Servers Section -->
+                <section id="servers-section" class="section">
+                    <h2>My Servers</h2>
+                    
+                    <div class="filters">
+                        <select id="serverFilter">
+                            <option value="active">Active</option>
+                            <option value="pending">Pending Approval</option>
+                            <option value="expired">Expired</option>
+                            <option value="all">All</option>
+                        </select>
+                    </div>
+
+                    <div id="serversContainer" class="servers-grid"></div>
+
+                    <div id="noServers" class="empty-state">
+                        <p>No servers yet. <a href="#" class="purchase-link">Purchase one now!</a></p>
+                    </div>
+                </section>
+
+                <!-- Purchase Section -->
+                <section id="purchase-section" class="section">
+                    <h2>Purchase a Server</h2>
+                    
+                    <div id="plansContainer" class="plans-grid"></div>
+
+                    <!-- Purchase Modal -->
+                    <div id="purchaseModal" class="modal">
+                        <div class="modal-content">
+                            <span class="close">&times;</span>
+                            <h3>Purchase Server</h3>
+                            <div id="planDetails" class="plan-details"></div>
+                            <form id="purchaseForm">
+                                <input type="hidden" id="planIdInput">
+                                <div class="form-group">
+                                    <label>Server Name:</label>
+                                    <input type="text" id="serverName" placeholder="e.g., My Hub Server" required>
+                                </div>
+                                <div class="form-group">
+                                    <label>Duration:</label>
+                                    <select id="durationSelect" required>
+                                        <option value="30">1 Month (30 days)</option>
+                                        <option value="90">3 Months (90 days)</option>
+                                        <option value="180">6 Months (180 days)</option>
+                                        <option value="365">1 Year (365 days)</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label>Total Price:</label>
+                                    <input type="text" id="totalPrice" readonly>
+                                </div>
+                                <p class="note">After purchase, an admin will review and approve your payment. You'll receive your server credentials via email.</p>
+                                <button type="submit" class="btn btn-primary btn-full">Continue to Payment</button>
+                            </form>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Billing Section -->
+                <section id="billing-section" class="section">
+                    <h2>Billing & Payments</h2>
+                    
+                    <div class="billing-info">
+                        <h3>Payment History</h3>
+                        <div class="table-container">
+                            <table id="billingsTable">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Server</th>
+                                        <th>Amount</th>
+                                        <th>Status</th>
+                                        <th>Receipt</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="billingBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="billing-info mt-4">
+                        <h3>Pending Payments</h3>
+                        <p class="note">These payments are awaiting admin approval. Once approved, your server will be activated.</p>
+                        <div id="pendingPaymentsContainer"></div>
+                    </div>
+                </section>
+
+                <!-- Settings Section -->
+                <section id="settings-section" class="section">
+                    <h2>Account Settings</h2>
+                    
+                    <form id="settingsForm" class="settings-form">
+                        <div class="form-group">
+                            <label>Username:</label>
+                            <input type="text" id="settingsUsername" readonly>
+                        </div>
+                        <div class="form-group">
+                            <label>Email:</label>
+                            <input type="email" id="settingsEmail" readonly>
+                        </div>
+                        <div class="form-group">
+                            <label>Member Since:</label>
+                            <input type="text" id="settingsJoined" readonly>
+                        </div>
+                        
+                        <hr style="margin: 2rem 0;">
+                        
+                        <h3>Security</h3>
+                        <button type="button" class="btn btn-secondary" id="changePasswordBtn">Change Password</button>
+                    </form>
+                </section>
+            </main>
+        </div>
+    </div>
+
+    <!-- Server Detail Modal -->
+    <div id="serverDetailModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h3 id="serverTitle"></h3>
+            <div class="server-detail">
+                <div class="detail-row">
+                    <span class="label">Status:</span>
+                    <span id="detailStatus"></span>
+                </div>
+                <div class="detail-row">
+                    <span class="label">Expires:</span>
+                    <span id="detailExpires"></span>
+                </div>
+                <div class="detail-row">
+                    <span class="label">Days Remaining:</span>
+                    <span id="detailDays"></span>
+                </div>
+                <div class="detail-row">
+                    <span class="label">Plan:</span>
+                    <span id="detailPlan"></span>
+                </div>
+            </div>
+
+            <div id="credentialsSection" class="credentials-section" style="display:none;">
+                <h4>Server Credentials (SFTP)</h4>
+                <div class="credential">
+                    <span class="label">Host:</span>
+                    <span id="credHost" class="credential-value"></span>
+                    <button class="btn-copy" data-copy="credHost">Copy</button>
+                </div>
+                <div class="credential">
+                    <span class="label">Username:</span>
+                    <span id="credUsername" class="credential-value"></span>
+                    <button class="btn-copy" data-copy="credUsername">Copy</button>
+                </div>
+                <div class="credential">
+                    <span class="label">Password:</span>
+                    <span id="credPassword" class="credential-value" style="display:none;"></span>
+                    <button class="btn-show" id="showPasswordBtn">Show Password</button>
+                    <button class="btn-copy" data-copy="credPassword" style="display:none;">Copy</button>
+                </div>
+                <div class="credential">
+                    <span class="label">Port:</span>
+                    <span id="credPort" class="credential-value"></span>
+                </div>
+            </div>
+
+            <div class="modal-actions">
+                <button type="button" class="btn btn-primary" id="renewServerBtn">Renew Server</button>
+                <button type="button" class="btn btn-danger" id="deleteServerBtn">Delete Server</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/dashboard.js"></script>
+</body>
+</html>

@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Astra Admin Dashboard</title>
+    <link rel="stylesheet" href="styles/admin.css">
+</head>
+<body>
+    <div class="container">
+        <nav class="navbar">
+            <div class="navbar-brand">
+                <h1>Astra Admin</h1>
+            </div>
+            <div class="navbar-menu">
+                <span id="adminName">Admin</span>
+                <button id="logoutBtn" class="btn-logout">Logout</button>
+            </div>
+        </nav>
+
+        <div class="admin-layout">
+            <!-- Sidebar -->
+            <aside class="sidebar">
+                <nav class="nav-menu">
+                    <a href="#" class="nav-item active" data-section="dashboard">
+                        <span class="icon">📊</span> Dashboard
+                    </a>
+                    <a href="#" class="nav-item" data-section="payments">
+                        <span class="icon">💰</span> Payments
+                    </a>
+                    <a href="#" class="nav-item" data-section="servers">
+                        <span class="icon">🖥️</span> Servers
+                    </a>
+                    <a href="#" class="nav-item" data-section="plans">
+                        <span class="icon">📋</span> Plans
+                    </a>
+                    <a href="#" class="nav-item" data-section="customers">
+                        <span class="icon">👥</span> Customers
+                    </a>
+                </nav>
+            </aside>
+
+            <!-- Main Content -->
+            <main class="main-content">
+                <!-- Dashboard Section -->
+                <section id="dashboard-section" class="section active">
+                    <h2>Dashboard Overview</h2>
+                    
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-value" id="totalCustomers">0</div>
+                            <div class="stat-label">Total Customers</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="totalServers">0</div>
+                            <div class="stat-label">Active Servers</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="totalRevenue">$0</div>
+                            <div class="stat-label">Revenue</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="pendingPayments">0</div>
+                            <div class="stat-label">Pending Approvals</div>
+                        </div>
+                    </div>
+
+                    <div class="chart-container">
+                        <h3>Revenue Trend (Last 30 Days)</h3>
+                        <div id="revenueChart" class="placeholder">Chart loading...</div>
+                    </div>
+                </section>
+
+                <!-- Payments Section -->
+                <section id="payments-section" class="section">
+                    <h2>Payment Approvals</h2>
+                    
+                    <div class="filters">
+                        <select id="paymentFilter">
+                            <option value="pending">Pending Only</option>
+                            <option value="all">All Payments</option>
+                        </select>
+                    </div>
+
+                    <div class="table-container">
+                        <table id="paymentsTable">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Customer</th>
+                                    <th>Amount</th>
+                                    <th>Server</th>
+                                    <th>Status</th>
+                                    <th>Date</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="paymentsBody"></tbody>
+                        </table>
+                    </div>
+
+                    <!-- Modal for approval -->
+                    <div id="approvalModal" class="modal">
+                        <div class="modal-content">
+                            <span class="close">&times;</span>
+                            <h3>Approve Payment</h3>
+                            <div class="modal-details" id="modalDetails"></div>
+                            <form id="approvalForm">
+                                <input type="hidden" id="paymentIdInput">
+                                <div class="form-group">
+                                    <label>UTR Number:</label>
+                                    <input type="text" id="utrInput" placeholder="Enter UTR" required>
+                                </div>
+                                <div class="form-group">
+                                    <label>Node ID:</label>
+                                    <input type="number" id="nodeInput" value="1">
+                                </div>
+                                <button type="submit" class="btn btn-primary">Approve</button>
+                                <button type="button" class="btn btn-danger" id="rejectBtn">Reject</button>
+                            </form>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Servers Section -->
+                <section id="servers-section" class="section">
+                    <h2>All Servers</h2>
+                    
+                    <div class="filters">
+                        <select id="serverFilter">
+                            <option value="active">Active</option>
+                            <option value="pending">Pending</option>
+                            <option value="expired">Expired</option>
+                            <option value="all">All</option>
+                        </select>
+                    </div>
+
+                    <div class="table-container">
+                        <table id="serversTable">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Customer</th>
+                                    <th>Server Name</th>
+                                    <th>Plan</th>
+                                    <th>Status</th>
+                                    <th>Expires</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="serversBody"></tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <!-- Plans Section -->
+                <section id="plans-section" class="section">
+                    <h2>Hosting Plans</h2>
+                    
+                    <button id="newPlanBtn" class="btn btn-primary mb-3">+ New Plan</button>
+
+                    <div class="plans-grid" id="plansGrid"></div>
+
+                    <!-- Plan Modal -->
+                    <div id="planModal" class="modal">
+                        <div class="modal-content">
+                            <span class="close">&times;</span>
+                            <h3 id="planModalTitle">New Plan</h3>
+                            <form id="planForm">
+                                <input type="hidden" id="planIdInput">
+                                <div class="form-group">
+                                    <label>Name:</label>
+                                    <input type="text" id="planName" required>
+                                </div>
+                                <div class="form-group">
+                                    <label>Price ($):</label>
+                                    <input type="number" id="planPrice" step="0.01" required>
+                                </div>
+                                <div class="form-group">
+                                    <label>CPU Cores:</label>
+                                    <input type="number" id="planCPU" required>
+                                </div>
+                                <div class="form-group">
+                                    <label>RAM (GB):</label>
+                                    <input type="number" id="planRAM" step="0.5" required>
+                                </div>
+                                <div class="form-group">
+                                    <label>Storage (GB):</label>
+                                    <input type="number" id="planStorage" required>
+                                </div>
+                                <div class="form-group">
+                                    <label>Max Players:</label>
+                                    <input type="number" id="planPlayers" required>
+                                </div>
+                                <button type="submit" class="btn btn-primary">Save Plan</button>
+                            </form>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Customers Section -->
+                <section id="customers-section" class="section">
+                    <h2>Customers</h2>
+                    
+                    <div class="table-container">
+                        <table id="customersTable">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Username</th>
+                                    <th>Email</th>
+                                    <th>Servers</th>
+                                    <th>Joined</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="customersBody"></tbody>
+                        </table>
+                    </div>
+                </section>
+            </main>
+        </div>
+    </div>
+
+    <script src="js/admin.js"></script>
+</body>
+</html>
